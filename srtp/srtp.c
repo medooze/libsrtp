@@ -2728,27 +2728,9 @@ srtp_get_trailer_length(const srtp_stream_t s) {
 
 #endif
 
-/*
- * srtp_get_stream(ssrc) returns a pointer to the stream corresponding
- * to ssrc, or NULL if no stream exists for that ssrc
- *
- * this is an internal function 
- */
-
 srtp_stream_ctx_t *
 srtp_get_stream(srtp_t srtp, uint32_t ssrc) {
-  srtp_stream_ctx_t *stream;
-
-  /* walk down list until ssrc is found */
-  stream = srtp->stream_list;
-  while (stream != NULL) {
-    if (stream->ssrc == ssrc)
-      return stream;
-    stream = stream->next;
-  }
-  
-  /* we haven't found our ssrc, so return a null */
-  return NULL;
+  return srtp_stream_list_get(&srtp->stream_list, ssrc);
 }
 
 srtp_err_status_t
@@ -2762,15 +2744,10 @@ srtp_dealloc(srtp_t session) {
    * memory and just return an error
    */
 
-  /* walk list of streams, deallocating as we go */
-  stream = session->stream_list;
-  while (stream != NULL) {
-    srtp_stream_t next = stream->next;
-    status = srtp_stream_dealloc(stream, session->stream_template);
-    if (status)
-      return status;
-    stream = next;
-  }
+  /* deallocate streams */
+  status = srtp_stream_list_dealloc(&session->stream_list, session->stream_template);
+  if (status)
+    return status;
   
   /* deallocate stream template, if there is one */
   if (session->stream_template != NULL) {
@@ -2833,8 +2810,7 @@ srtp_add_stream(srtp_t session,
     session->stream_template->direction = dir_srtp_receiver;
     break;
   case (ssrc_specific):
-    tmp->next = session->stream_list;
-    session->stream_list = tmp;
+    srtp_stream_list_insert(&session->stream_list, tmp);
     break;
   case (ssrc_undefined):
   default:
@@ -2862,13 +2838,23 @@ srtp_create(srtp_t *session,               /* handle for session     */
     return srtp_err_status_alloc_fail;
   *session = ctx;
 
+  ctx->stream_template = NULL;
+  ctx->stream_list = NULL;
+  ctx->user_data = NULL;
+
+  /* allocate stream list */
+  stat = srtp_stream_list_create(&ctx->stream_list);
+  if (stat) {
+    /* clean up everything */
+    srtp_dealloc(*session);
+    *session = NULL;
+    return stat;
+  }
+
   /* 
    * loop over elements in the policy list, allocating and
    * initializing a stream for each element
    */
-  ctx->stream_template = NULL;
-  ctx->stream_list = NULL;
-  ctx->user_data = NULL;
   while (policy != NULL) {    
 
     stat = srtp_add_stream(ctx, policy);
@@ -2896,21 +2882,10 @@ srtp_remove_stream(srtp_t session, uint32_t ssrc) {
   if (session == NULL)
     return srtp_err_status_bad_param;
   
-  /* find stream in list; complain if not found */
-  last_stream = stream = session->stream_list;
-  while ((stream != NULL) && (ssrc != stream->ssrc)) {
-    last_stream = stream;
-    stream = stream->next;
-  }
+  /* find and remove stream from the list */
+  stream = srtp_stream_list_delete(&session->stream_list, ssrc);
   if (stream == NULL)
     return srtp_err_status_no_ctx;
-
-  /* remove stream from the list */
-  if (last_stream == stream)
-    /* stream was first in list */
-    session->stream_list = stream->next;
-  else
-    last_stream->next = stream->next;
 
   /* deallocate the stream */
   status = srtp_stream_dealloc(stream, session->stream_template);
