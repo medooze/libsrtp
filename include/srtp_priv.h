@@ -65,6 +65,7 @@ extern "C" {
 
 typedef struct srtp_stream_ctx_t_ srtp_stream_ctx_t;
 typedef srtp_stream_ctx_t *srtp_stream_t;
+typedef struct srtp_stream_list_ctx_t_ *srtp_stream_list_t;
 
 /*
  * the following declarations are libSRTP internal functions 
@@ -99,6 +100,8 @@ srtp_err_status_t srtp_steam_init_all_master_keys(srtp_stream_ctx_t *srtp,
  * use the policy at the location p
  */
 srtp_err_status_t srtp_stream_init(srtp_stream_t srtp, const srtp_policy_t *p);
+
+srtp_err_status_t srtp_stream_dealloc(srtp_stream_ctx_t *stream, srtp_stream_ctx_t *stream_template);
 
 
 /*
@@ -161,7 +164,7 @@ typedef struct srtp_stream_ctx_t_ {
  */
 
 typedef struct srtp_ctx_t_ {
-  struct srtp_stream_ctx_t_ *stream_list;     /* linked list of streams            */
+  srtp_stream_list_t stream_list;     /* list of streams            */
   struct srtp_stream_ctx_t_ *stream_template; /* act as template for other streams */
   void *user_data;                    /* user custom data */
 } srtp_ctx_t_;
