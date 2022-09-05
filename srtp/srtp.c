@@ -1978,9 +1978,8 @@ srtp_unprotect_aead (srtp_ctx_t *ctx, srtp_stream_ctx_t *stream, int delta,
             return status;
         }
 
-        /* add new stream to the head of the stream_list */
-        new_stream->next = ctx->stream_list;
-        ctx->stream_list = new_stream;
+        /* add new stream to the list */
+        srtp_stream_list_insert(&ctx->stream_list, new_stream);
 
         /* set stream (the pointer used in this function) */
         stream = new_stream;
@@ -2058,9 +2057,8 @@ srtp_protect_mki(srtp_ctx_t *ctx, void *rtp_hdr, int *pkt_octet_len,
        if (status)
 	 return status;
 
-       /* add new stream to the head of the stream_list */
-       new_stream->next = ctx->stream_list;
-       ctx->stream_list = new_stream;
+       /* add new stream to the list */
+       srtp_stream_list_insert(&ctx->stream_list, new_stream);
 
        /* set direction to outbound */
        new_stream->direction = dir_srtp_sender;
@@ -2649,9 +2647,8 @@ srtp_unprotect_mki(srtp_ctx_t *ctx, void *srtp_hdr, int *pkt_octet_len,
     if (status)
       return status;
     
-    /* add new stream to the head of the stream_list */
-    new_stream->next = ctx->stream_list;
-    ctx->stream_list = new_stream;
+    /* add new stream to the list */
+    srtp_stream_list_insert(&ctx->stream_list, new_stream);
     
     /* set stream (the pointer used in this function) */
     stream = new_stream;
@@ -3803,9 +3800,8 @@ srtp_unprotect_rtcp_aead (srtp_t ctx, srtp_stream_ctx_t *stream,
             return status;
         }
 
-        /* add new stream to the head of the stream_list */
-        new_stream->next = ctx->stream_list;
-        ctx->stream_list = new_stream;
+        /* add new stream to the list */
+        srtp_stream_list_insert(&ctx->stream_list, new_stream);
 
         /* set stream (the pointer used in this function) */
         stream = new_stream;
@@ -3863,9 +3859,8 @@ srtp_protect_rtcp_mki(srtp_t ctx, void *rtcp_hdr, int *pkt_octet_len,
       if (status)
 	return status;
       
-      /* add new stream to the head of the stream_list */
-      new_stream->next = ctx->stream_list;
-      ctx->stream_list = new_stream;
+      /* add new stream to the list */
+      srtp_stream_list_insert(&ctx->stream_list, new_stream);
       
       /* set stream (the pointer used in this function) */
       stream = new_stream;
@@ -4330,9 +4325,8 @@ srtp_unprotect_rtcp_mki(srtp_t ctx, void *srtcp_hdr, int *pkt_octet_len,
     if (status)
       return status;
     
-    /* add new stream to the head of the stream_list */
-    new_stream->next = ctx->stream_list;
-    ctx->stream_list = new_stream;
+    /* add new stream to the list */
+    srtp_stream_list_insert(&ctx->stream_list, new_stream);
     
     /* set stream (the pointer used in this function) */
     stream = new_stream;
@@ -4487,6 +4481,11 @@ srtp_profile_get_master_salt_length(srtp_profile_t profile) {
   }
 }
 
+static int get_first_stream(srtp_stream_t stream, void *data) {
+  *((srtp_stream_t *)data) = stream;
+  return 1;
+}
+
 srtp_err_status_t
 srtp_get_protect_trailer_length(srtp_t session,
                                 uint32_t use_mki,
@@ -4501,7 +4500,8 @@ srtp_get_protect_trailer_length(srtp_t session,
     *length = 0;
 
     /* Try obtaining stream from stream_list */
-    stream = session->stream_list;
+    stream = NULL;
+    srtp_stream_list_for_each(&session->stream_list, get_first_stream, &stream);
 
     if (stream == NULL) {
         /* Try obtaining the template stream */
@@ -4539,7 +4539,8 @@ srtp_get_protect_rtcp_trailer_length(srtp_t session,
     *length = 0;
 
     /* Try obtaining stream from stream_list */
-    stream = session->stream_list;
+    stream = NULL;
+    srtp_stream_list_for_each(&session->stream_list, get_first_stream, &stream);
 
     if (stream == NULL) {
         /* Try obtaining the template stream */
