@@ -63,14 +63,26 @@
 #ifdef _BYPASS_OSSL_PARAM
 // I should be jailed for this
 #define __field_addr(ptr, offset, type) ((type *)((char *)(ptr) + (offset)))
+// <providers/implementations/include/prov/ciphercommon.h>
+#define IV_STATE_BUFFERED      1
+// struct evp_cipher_ctx_st <crypto/evp/evp_local.h>:
+//     clang -E -Iinclude crypto/evp/evp_enc.c | clang -cc1 -emit-llvm -fdump-record-layouts - | grep -B2 -A20 'struct evp_cipher_ctx_st'
+static void *get_openssl_algctx(EVP_CIPHER_CTX *ctx) {
+    return * __field_addr(ctx, 168, void *);
+}
+// struct prov_gcm_ctx_st <providers/implementations/include/prov/ciphercommon_gcm.h>
+//     clang -E -Iinclude -Iproviders/{implementations,common}/include providers/implementations/ciphers/ciphercommon_gcm.c | clang -cc1 -emit-llvm -fdump-record-layouts - | grep -B2 -A20 'struct prov_gcm_ctx_st'
 static void get_openssl_ctx_tag(EVP_CIPHER_CTX *ctx, char **buf, size_t **taglen) {
-    // struct evp_cipher_ctx_st <crypto/evp/evp_local.h>:
-    //     clang -E -Iinclude crypto/evp/evp_enc.c | clang -cc1 -emit-llvm -fdump-record-layouts - | grep -B2 -A20 'struct evp_cipher_ctx_st'
-    void *algctx = * __field_addr(ctx, 168, void *);
-    // struct prov_gcm_ctx_st <providers/implementations/include/prov/ciphercommon_gcm.h>
-    //     clang -E -Iinclude -Iproviders/{implementations,common}/include providers/implementations/ciphers/ciphercommon_gcm.c | clang -cc1 -emit-llvm -fdump-record-layouts - | grep -B2 -A20 'struct prov_gcm_ctx_st'
+    void *algctx = get_openssl_algctx(ctx);
     *buf = __field_addr(algctx, 213, char);
     *taglen = __field_addr(algctx, 24, size_t);
+}
+static void set_openssl_iv(EVP_CIPHER_CTX *ctx, uint8_t *iv, int enc) {
+    void *algctx = get_openssl_algctx(ctx);
+    * __field_addr(algctx, 84, uint8_t) |= enc; // enc
+    memcpy(__field_addr(algctx, 85, char), iv, 12); // iv
+    * __field_addr(algctx, 16, size_t) = 12; // ivlen
+    * __field_addr(algctx, 80, unsigned int) = IV_STATE_BUFFERED; // iv_state
 }
 #endif
 
@@ -244,10 +256,14 @@ static srtp_err_status_t srtp_aes_gcm_openssl_set_iv(
     debug_print(srtp_mod_aes_gcm, "setting iv: %s",
                 srtp_octet_string_hex_string(iv, 12));
 
+#ifdef _BYPASS_OSSL_PARAM
+    set_openssl_iv(c->ctx, iv, (c->dir == srtp_direction_encrypt ? 1 : 0));
+#else
     if (!EVP_CipherInit_ex(c->ctx, NULL, NULL, NULL, iv,
                            (c->dir == srtp_direction_encrypt ? 1 : 0))) {
         return (srtp_err_status_init_fail);
     }
+#endif
 
     return (srtp_err_status_ok);
 }
