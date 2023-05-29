@@ -79,7 +79,8 @@ static void get_openssl_ctx_tag(EVP_CIPHER_CTX *ctx, char **buf, size_t **taglen
 }
 static void set_openssl_iv(EVP_CIPHER_CTX *ctx, uint8_t *iv, int enc) {
     void *algctx = get_openssl_algctx(ctx);
-    * __field_addr(algctx, 84, uint8_t) |= enc; // enc
+    if (enc)   * __field_addr(algctx, 84, uint8_t) |=  1; // enc
+    else       * __field_addr(algctx, 84, uint8_t) &= ~1; // enc
     memcpy(__field_addr(algctx, 85, char), iv, 12); // iv
     * __field_addr(algctx, 16, size_t) = 12; // ivlen
     * __field_addr(algctx, 80, unsigned int) = IV_STATE_BUFFERED; // iv_state
